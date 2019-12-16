@@ -1,0 +1,161 @@
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+     .zui-table {
+       width: 100%;
+       border: solid 1px #DDEEEE;
+       border-collapse: collapse;
+       border-spacing: 0;
+       font: normal 13px Arial, sans-serif;
+     }
+     .zui-table .even {
+       background-color: #C6C6C6;
+     }
+     .zui-table .odd {
+       background-color: #FFFFFF;
+     }
+     .zui-table thead th {
+       background-color: #DDEFEF;
+       border: solid 1px #DDEEEE;
+       color: #336B6B;
+       padding: 10px;
+       text-align: left;
+       text-shadow: 1px 1px 1px #fff;
+     }
+     .zui-table tbody td {
+       border: solid 1px #DDEEEE;
+       color: #333;
+       padding: 10px;
+       text-shadow: 1px 1px 1px #fff;
+     }
+    </style>
+    <script>
+     var currentTemp;
+     var currentFreq;
+
+     window.onload = function() {
+       var time = new Date();
+
+       var cpuTemp = {
+         x: [],
+         y: [],
+         mode: 'lines',
+         name: "CPU Temp",
+         line: {
+           color: '#80CAF6',
+           shape: 'spline'
+         }
+       }
+
+       var cpuFreq = {
+         x: [],
+         y: [],
+         xaxis: 'x2',
+         yaxis: 'y2',
+         mode: 'lines',
+         name: "CPU Freuency",
+         line: {color: '#DF56F1'}
+       };
+
+       var layout = {
+         xaxis: {
+           type: 'date',
+           domain: [0, 1],
+           showticklabels: false
+         },
+         yaxis: {domain: [0.6,1]},
+         xaxis2: {
+           type: 'date',
+           anchor: 'y2',
+           domain: [0, 1]
+         },
+         yaxis2: {
+           anchor: 'x2',
+           domain: [0, 0.4]},
+       }
+
+       var data = [cpuTemp,cpuFreq];
+
+       Plotly.plot('graph', data, layout);
+
+       var cnt = 0;
+
+       var interval = setInterval(function() {
+
+         var time = new Date();
+
+         var update = {
+           x: [[time], [time]],
+           y: [[currentTemp], [currentFreq]]
+         }
+
+         Plotly.extendTraces('graph', update, [0,1])
+
+         if(cnt === 100) clearInterval(interval);
+       }, 1000);
+
+       var ws;
+       ws = new WebSocket("{{.}}");
+       ws.onopen = function(evt) {
+         console.info("OPEN");
+         ws.send("hello");
+       }
+       ws.onclose = function(evt) {
+         console.info("CLOSE");
+         ws = null;
+       }
+       ws.onmessage = function(evt) {
+         data = JSON.parse(evt.data);
+         currentTemp = data.temp;
+         currentFreq = data.frequency;
+         var a = document.getElementById("current_temp")
+         a.innerHTML = currentTemp
+         var b = document.getElementById("min_temp")
+         b.innerHTML = data.min_temp
+         document.getElementById("max_temp").innerHTML = data.max_temp
+         document.getElementById("mean_temp").innerHTML = data.mean_temp
+         document.getElementById("current_freq").innerHTML = currentFreq
+         document.getElementById("min_freq").innerHTML = data.min_freq
+         document.getElementById("max_freq").innerHTML = data.max_freq
+         document.getElementById("mean_freq").innerHTML = data.mean_freq
+       }
+       ws.onerror = function(evt) {
+         print("ERROR: " + evt.data);
+       }
+     };
+    </script>
+  </head>
+  <body>
+    <div id="graph"></div>
+    <div id="table_stats">
+      <table class="zui-table">
+        <tr class="even">
+          <td> Temp </td>
+          <td id="current_temp"> </td>
+          <td> Frequency </td>
+          <td id="current_freq"> </td>
+        </tr>
+        <tr class="odd">
+          <td> Min Temp </td>
+          <td id="min_temp"> </td>
+          <td> Min Frequency </td>
+          <td id="min_freq"> </td>
+        </tr>
+        <tr class="even">
+          <td> Max Temp </td>
+          <td id="max_temp"></td>
+          <td> Maximum Frequency </td>
+          <td id="max_freq"> </td>
+        </tr>
+        <tr class="odd">
+          <td> Average Temp </td>
+          <td id="mean_temp"> </td>
+          <td> Average Frequency </td>
+          <td id="mean_freq"> </td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>
