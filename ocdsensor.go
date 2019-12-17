@@ -19,9 +19,13 @@ import (
 )
 
 var (
-	Address = flag.String("addr", "0.0.0.0:8080", "http service address")
-	count   = 0
-	mu      = sync.RWMutex{}
+	Address     = flag.String("addr", "0.0.0.0:8080", "http service address")
+	count       = 0
+	mu          = sync.RWMutex{}
+	tempSensors = map[string]string{
+		"GenuineIntel": `coretemp-isa-0000.Package\ id\ 0.temp1_input`,
+		"AuthenticAMD": `nct6798-isa-0290.SMBUSMASTER\ 0.temp8_input`,
+	}
 )
 
 var upgrader = websocket.Upgrader{} // use default options
@@ -92,11 +96,11 @@ func getWebSocketMessage() *Message {
 	return newMessage(currentMessage)
 }
 
-func readTempFrequence() {
+func readTempFrequence(cpuName string) {
 	mu.Lock()
 	defer mu.Unlock()
 	count++
-	temp := getTemp()
+	temp := getTemp(cpuName)
 	maxFrequenct := getMaxFrequence()
 	message := &Message{
 		TimeStamp:    time.Now(),
@@ -140,14 +144,19 @@ func readTempFrequence() {
 	currentMessage.CurrentTempl = temp
 }
 
-func getTemp() float64 {
+func getTemp(cpuName string) float64 {
 	cmd := exec.Command("sensors", "-j")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("error reading sensors output: %v", err)
 		return 0
 	}
-	value := gjson.Get(string(output), `nct6798-isa-0290.SMBUSMASTER\ 0.temp8_input`)
+	sensorString, ok := tempSensors[cpuName]
+	if !ok {
+		log.Printf("no temp sensor found for: %s", cpuName)
+		return 0
+	}
+	value := gjson.Get(string(output), sensorString)
 	temp := value.Float()
 	return math.Round(temp*100) / 100
 }
@@ -178,6 +187,28 @@ func getMaxFrequence() float64 {
 	return maxSpeed
 }
 
+func getCPUName() string {
+	raw, err := ioutil.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		log.Printf("error reading cpuingo: %v", err)
+		return ""
+	}
+	output := string(raw)
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if len(line) > 0 {
+			a := strings.Split(line, ":")
+			key := strings.TrimSpace(a[0])
+			val := strings.TrimSpace(a[1])
+			if key == "vendor_id" {
+				return val
+			}
+		}
+	}
+	return ""
+}
+
 func home(w http.ResponseWriter, r *http.Request) {
 	homeTemplate.Execute(w, "ws://"+r.Host+"/echo")
 }
@@ -187,9 +218,10 @@ var homeTemplate = template.Must(template.New("").Parse(string(MustAsset("assets
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
+	cpuName := getCPUName()
 	go func() {
 		for {
-			readTempFrequence()
+			readTempFrequence(cpuName)
 			time.Sleep(500 * time.Millisecond)
 		}
 	}()
