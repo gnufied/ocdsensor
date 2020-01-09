@@ -39,6 +39,7 @@ type Message struct {
 	MinTemp      float64   `json:"min_temp"`
 	MaxTemp      float64   `json:"max_temp"`
 	MeanTemp     float64   `json:"mean_temp"`
+	TempMA30     float64   `json:"temp_ma30"`
 	MinFreq      float64   `json:"min_freq"`
 	MaxFreq      float64   `json:"max_freq"`
 	MeanFreq     float64   `json:"mean_freq"`
@@ -55,6 +56,7 @@ func newMessage(msg *Message) *Message {
 		MinFreq:      msg.MinFreq,
 		MaxFreq:      msg.MaxFreq,
 		MeanFreq:     msg.MeanFreq,
+		TempMA30:     msg.TempMA30,
 	}
 }
 
@@ -96,7 +98,7 @@ func getWebSocketMessage() *Message {
 	return newMessage(currentMessage)
 }
 
-func readTempFrequence(cpuName string) {
+func readTempFrequence(cpuName string, startTime time.Time, maCounter int64) {
 	mu.Lock()
 	defer mu.Unlock()
 	count++
@@ -109,6 +111,7 @@ func readTempFrequence(cpuName string) {
 		MaxTemp:      temp,
 		MinTemp:      temp,
 		MeanTemp:     temp,
+		TempMA30:     temp,
 		MaxFreq:      maxFrequenct,
 		MinFreq:      maxFrequenct,
 		MeanFreq:     maxFrequenct,
@@ -135,6 +138,10 @@ func readTempFrequence(cpuName string) {
 	tempDiff := (temp - currentMessage.MeanTemp) / float64(count)
 	meanTemp := currentMessage.MeanTemp + tempDiff
 	currentMessage.MeanTemp = meanTemp
+
+	maTempDiff := (temp - currentMessage.TempMA30) / float64(maCounter)
+	maMeanTemp := currentMessage.TempMA30 + maTempDiff
+	currentMessage.TempMA30 = maMeanTemp
 
 	freqDiff := (maxFrequenct - currentMessage.MeanFreq) / float64(count)
 	meanFreq := currentMessage.MeanFreq + freqDiff
@@ -220,9 +227,21 @@ func main() {
 	log.SetFlags(0)
 	cpuName := getCPUName()
 	go func() {
+		startTime := time.Now()
+		var maCounter int64
+		maCounter = 0
 		for {
-			readTempFrequence(cpuName)
+			maCounter++
+			readTempFrequence(cpuName, startTime, maCounter)
 			time.Sleep(500 * time.Millisecond)
+			currentTime := time.Now()
+			t := startTime.Add(30 * time.Second)
+			// if we are here that means we are past 30s
+			if currentTime.After(t) {
+				startTime = time.Now()
+				maCounter = 0
+			}
+
 		}
 	}()
 
