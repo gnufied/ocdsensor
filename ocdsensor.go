@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -26,6 +27,7 @@ var (
 		"GenuineIntel": `coretemp-isa-0000.Package\ id\ 0.temp1_input`,
 		"AuthenticAMD": `nct6798-isa-0290.SMBUSMASTER\ 0.temp8_input`,
 	}
+	thinkPadString = `thinkpad-isa-0000.temp1.temp1_input`
 )
 
 var upgrader = websocket.Upgrader{} // use default options
@@ -158,14 +160,30 @@ func getTemp(cpuName string) float64 {
 		log.Printf("error reading sensors output: %v", err)
 		return 0
 	}
+
+	temp, ok := checkForThinkpad(string(output))
+	if ok {
+		return temp
+	}
+
 	sensorString, ok := tempSensors[cpuName]
 	if !ok {
 		log.Printf("no temp sensor found for: %s", cpuName)
 		return 0
 	}
 	value := gjson.Get(string(output), sensorString)
-	temp := value.Float()
+	temp = value.Float()
 	return math.Round(temp*100) / 100
+}
+
+func checkForThinkpad(jsonOutput string) (float64, bool) {
+	value := gjson.Get(jsonOutput, thinkPadString)
+	temp := value.Float()
+	if value.Index == 0 || temp <= 0 {
+		fmt.Printf("String not found: %+v\n", value)
+		return temp, false
+	}
+	return math.Round(temp*100) / 100, true
 }
 
 func getMaxFrequence() float64 {
