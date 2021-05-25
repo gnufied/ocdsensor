@@ -35,6 +35,7 @@
      var currentTemp;
      var currentFreq;
      var currentMeanTemp;
+     var currentMeanCPUFreq;
 
      window.onload = function() {
        var time = new Date();
@@ -71,6 +72,19 @@
          line: {color: '#DF56F1'}
        };
 
+       var meanCPUFreq = {
+         x: [],
+         y: [],
+         xaxis: 'x2',
+         yaxis: 'y2',
+         mode: 'lines',
+         name: "Mean CPU Freq",
+         line: {
+           color: '#C62BC5',
+           dash: 'dot',
+         }
+       }
+
        var layout = {
          xaxis: {
            type: 'date',
@@ -88,7 +102,7 @@
            domain: [0, 0.4]},
        }
 
-       var data = [cpuTemp, maCPUTemp,cpuFreq];
+       var data = [cpuTemp, maCPUTemp,cpuFreq, meanCPUFreq];
 
        Plotly.plot('graph', data, layout);
 
@@ -99,11 +113,11 @@
          var time = new Date();
 
          var update = {
-           x: [[time], [time], [time]],
-           y: [[currentTemp], [currentMeanTemp], [currentFreq]]
+           x: [[time], [time], [time], [time]],
+           y: [[currentTemp], [currentMeanTemp], [currentFreq], [currentMeanCPUFreq]]
          }
 
-         Plotly.extendTraces('graph', update, [0,1,2])
+         Plotly.extendTraces('graph', update, [0,1,2,3])
 
          if(cnt === 100) clearInterval(interval);
        }, 1000);
@@ -123,6 +137,7 @@
          currentTemp = data.temp;
          currentFreq = data.frequency;
          currentMeanTemp = data.temp_ma30;
+         currentMeanCPUFreq = data.mean_all_freq;
          var a = document.getElementById("current_temp")
          a.innerHTML = currentTemp
          var b = document.getElementById("min_temp")

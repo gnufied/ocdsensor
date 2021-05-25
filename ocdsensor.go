@@ -48,6 +48,7 @@ type Message struct {
 	MinFreq      float64   `json:"min_freq"`
 	MaxFreq      float64   `json:"max_freq"`
 	MeanFreq     float64   `json:"mean_freq"`
+	MeanAllFreq  float64   `json:"mean_all_freq"`
 }
 
 func newMessage(msg *Message) *Message {
@@ -62,6 +63,7 @@ func newMessage(msg *Message) *Message {
 		MaxFreq:      msg.MaxFreq,
 		MeanFreq:     msg.MeanFreq,
 		TempMA30:     msg.TempMA30,
+		MeanAllFreq:  msg.MeanAllFreq,
 	}
 }
 
@@ -108,7 +110,10 @@ func readTempFrequence(cpuName string, startTime time.Time, maCounter int64) {
 	defer mu.Unlock()
 	count++
 	temp := getTemp(cpuName)
-	maxFrequenct := getMaxFrequence()
+	procContent, _ := readProcInfo()
+
+	maxFrequenct := getMaxFrequence(procContent)
+	meanFrequencyAll := getMeanFrequency(procContent)
 	message := &Message{
 		TimeStamp:    time.Now(),
 		Frequency:    maxFrequenct,
@@ -120,6 +125,7 @@ func readTempFrequence(cpuName string, startTime time.Time, maCounter int64) {
 		MaxFreq:      maxFrequenct,
 		MinFreq:      maxFrequenct,
 		MeanFreq:     maxFrequenct,
+		MeanAllFreq:  meanFrequencyAll,
 	}
 
 	if currentMessage == nil {
@@ -154,6 +160,7 @@ func readTempFrequence(cpuName string, startTime time.Time, maCounter int64) {
 
 	currentMessage.Frequency = maxFrequenct
 	currentMessage.CurrentTempl = temp
+	currentMessage.MeanAllFreq = meanFrequencyAll
 }
 
 func getTemp(cpuName string) float64 {
@@ -179,16 +186,21 @@ func getTemp(cpuName string) float64 {
 	return 0
 }
 
-func getMaxFrequence() float64 {
+func readProcInfo() ([]string, error) {
+	emptyList := []string{}
 	raw, err := ioutil.ReadFile("/proc/cpuinfo")
 	if err != nil {
 		log.Printf("error reading cpuingo: %v", err)
-		return 0
+		return emptyList, err
 	}
 	output := string(raw)
 	lines := strings.Split(output, "\n")
+	return lines, nil
+}
+
+func getMaxFrequence(procContent []string) float64 {
 	var maxSpeed float64
-	for _, line := range lines {
+	for _, line := range procContent {
 		line = strings.TrimSpace(line)
 		if len(line) > 0 {
 			a := strings.Split(line, ":")
@@ -203,6 +215,35 @@ func getMaxFrequence() float64 {
 		}
 	}
 	return maxSpeed
+}
+
+func getMeanFrequency(procContent []string) float64 {
+	var averageSpeed float64
+	count := 0
+
+	for _, line := range procContent {
+		line = strings.TrimSpace(line)
+		if len(line) > 0 {
+			a := strings.Split(line, ":")
+			key := strings.TrimSpace(a[0])
+			val := strings.TrimSpace(a[1])
+			if key == "cpu MHz" {
+				freq, err := strconv.ParseFloat(val, 64)
+				if err == nil {
+					count++
+					freq = math.Round(freq*100) / 100
+					if averageSpeed == 0 {
+						averageSpeed = freq
+						continue
+					} else {
+						freqDiff := (freq - averageSpeed) / float64(count)
+						averageSpeed = averageSpeed + freqDiff
+					}
+				}
+			}
+		}
+	}
+	return averageSpeed
 }
 
 func getCPUName() string {
