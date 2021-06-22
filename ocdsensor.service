@@ -1,0 +1,12 @@
+[Unit]
+Description=OCDSensor
+After=network.target
+Documentation=man:socat(1)
+
+[Service]
+ExecStart=/usr/bin/ocdsensor "--addr=0.0.0.0:9000"
+Restart=on-success
+
+
+[Install]
+WantedBy=multi-user.target
