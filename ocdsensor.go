@@ -29,6 +29,8 @@ var (
 		"AuthenticAMD": []string{
 			`nct6798-isa-0290.SMBUSMASTER\ 0.temp8_input`,
 			`thinkpad-isa-0000.temp1.temp1_input`,
+			`nct6797-isa-0a20.SMBUSMASTER\ 0.temp7_input`,
+			`k10temp-pci-00c3.Tctl.temp1_input`,
 		},
 	}
 )
