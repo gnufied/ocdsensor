@@ -1,4 +1,4 @@
-module main
+module github.com/gnufied/ocdsensor
 
 go 1.13
 

@@ -19,10 +19,13 @@ import (
 )
 
 var (
-	Address     = flag.String("addr", "0.0.0.0:8080", "http service address")
-	count       = 0
-	mu          = sync.RWMutex{}
-	tempSensors = map[string][]string{
+	Address        = flag.String("addr", "0.0.0.0:8080", "HTTP(S) service address")
+	tlsCert        = flag.String("tls-cert", "", "TLS certificate file (requires --tls-key)")
+	tlsKey         = flag.String("tls-key", "", "TLS private key file (requires --tls-cert)")
+	allowedOrigins = flag.String("allowed-origins", "", "Comma-separated additional WebSocket origins, e.g. https://fast.home.lan:9090")
+	count          = 0
+	mu             = sync.RWMutex{}
+	tempSensors    = map[string][]string{
 		"GenuineIntel": []string{
 			`coretemp-isa-0000.Package\ id\ 0.temp1_input`,
 		},
@@ -76,12 +79,26 @@ func echo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.Close()
+	c.SetReadLimit(1024)
+	c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	mt, msg, err := c.ReadMessage()
 	if err != nil {
 		log.Println("read:", err)
 		return
 	}
 	log.Printf("recv: %s", msg)
+	c.SetReadDeadline(time.Time{})
+	disconnected := make(chan struct{})
+	// Gorilla processes close and ping frames while reading. Keep a reader
+	// active even though clients do not send more data after the greeting.
+	go func() {
+		defer close(disconnected)
+		for {
+			if _, _, err := c.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
 
 	for {
 		message := getWebSocketMessage()
@@ -92,12 +109,17 @@ func echo(w http.ResponseWriter, r *http.Request) {
 			log.Printf("error marshalling stuff: %+v", err)
 			break
 		}
+		c.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		err = c.WriteMessage(mt, t)
 		if err != nil {
 			log.Println("write:", err)
 			break
 		}
-		time.Sleep(1000 * time.Millisecond)
+		select {
+		case <-disconnected:
+			return
+		case <-time.After(time.Second):
+		}
 	}
 }
 
@@ -271,7 +293,11 @@ func getCPUName() string {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
-	homeTemplate.Execute(w, "ws://"+r.Host+"/echo")
+	scheme := "ws"
+	if r.TLS != nil {
+		scheme = "wss"
+	}
+	homeTemplate.Execute(w, scheme+"://"+r.Host+"/echo")
 }
 
 var homeTemplate = template.Must(template.New("").Parse(string(MustAsset("assets/home.html"))))
@@ -279,6 +305,14 @@ var homeTemplate = template.Must(template.New("").Parse(string(MustAsset("assets
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
+	var err error
+	upgrader, err = configuredUpgrader(*allowedOrigins)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if (*tlsCert == "") != (*tlsKey == "") {
+		log.Fatal("--tls-cert and --tls-key must be provided together")
+	}
 	cpuName := getCPUName()
 	go func() {
 		startTime := time.Now()
@@ -301,5 +335,5 @@ func main() {
 
 	http.HandleFunc("/echo", echo)
 	http.HandleFunc("/", home)
-	log.Fatal(http.ListenAndServe(*Address, nil))
+	log.Fatal(serve(*Address, *tlsCert, *tlsKey, nil))
 }

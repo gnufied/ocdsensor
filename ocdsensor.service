@@ -1,12 +1,10 @@
 [Unit]
 Description=OCDSensor
 After=network.target
-Documentation=man:socat(1)
 
 [Service]
-ExecStart=/usr/bin/ocdsensor "--addr=0.0.0.0:9000"
-Restart=on-success
-
+ExecStart=/usr/bin/ocdsensor --addr=0.0.0.0:9000 --tls-cert=/etc/cockpit/ws-certs.d/0-self-signed.cert --tls-key=/etc/cockpit/ws-certs.d/0-self-signed.key --allowed-origins=https://fast.home.lan:9090
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
